@@ -1,0 +1,6 @@
+{
+  "appId": "com.bestbill.superadmin",
+  "appName": "BestBill Super Admin",
+  "webDir": "dist",
+  "bundledWebRuntime": false
+}
