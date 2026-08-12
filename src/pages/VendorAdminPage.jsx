@@ -198,36 +198,85 @@ export default function VendorAdminPage() {
     const item = deleteConfirmItem;
     setDeleting(true);
 
-    const table = item.platform === 'mobile' ? 'mobile_licenses' : 'desktop_licenses';
     try {
-      console.log(`[SUPER ADMIN] Deleting record id ${item.id} from ${table}...`);
-      
-      // Delete from license table
-      const { error: licErr } = await supabase
-        .from(table)
-        .delete()
-        .eq('id', item.id);
+      console.log(`[SUPER ADMIN] PERMANENT MULTI-TABLE DELETION for "${item.hotel_name}"...`);
 
-      if (licErr) console.warn('[SUPER ADMIN] License delete warning:', licErr.message);
+      const matchedHotelRow = (hotelsData || []).find(h => 
+        h.id === item.id || 
+        (h.hotel_code && h.hotel_code === item.device_uuid) || 
+        (h.hotel_name && item.hotel_name && h.hotel_name.toLowerCase().trim() === item.hotel_name.toLowerCase().trim())
+      );
+      const matchedSnapRow = (snapshotsData || []).find(s => s.hotel_code && s.hotel_code === item.device_uuid);
+      const targetCode = matchedHotelRow?.hotel_code || item.hotel_code || matchedSnapRow?.hotel_code || item.device_uuid;
+      const targetOwnerId = matchedHotelRow?.owner_id || item.owner_id;
+      const targetEmail = item.email || matchedHotelRow?.email;
+      const targetHotelName = item.hotel_name || matchedHotelRow?.hotel_name;
 
-      // If device_uuid is present, also try deleting by device_uuid
-      if (item.device_uuid) {
-        await supabase.from(table).delete().eq('device_uuid', item.device_uuid);
-      }
+      // Safe helper function for Supabase deletes without broken .catch chaining
+      const safeDelete = async (table, column, val, isIlike = false) => {
+        if (!val) return;
+        try {
+          let builder = supabase.from(table).delete();
+          if (isIlike) {
+            builder = builder.ilike(column, val.trim());
+          } else {
+            builder = builder.eq(column, val);
+          }
+          await builder;
+        } catch (e) {
+          console.warn(`[SUPER ADMIN] Delete ${table} (${column}=${val}) notice:`, e.message);
+        }
+      };
 
-      // Also try cleaning up related hotel entry if matching owner_id or hotel_name
-      if (item.hotel_name) {
-        await supabase.from('hotels').delete().ilike('hotel_name', item.hotel_name.trim());
-      }
+      // 1. Delete from mobile_licenses
+      await safeDelete('mobile_licenses', 'id', item.id);
+      await safeDelete('mobile_licenses', 'device_uuid', item.device_uuid);
+      await safeDelete('mobile_licenses', 'email', targetEmail);
+      await safeDelete('mobile_licenses', 'hotel_name', targetHotelName, true);
 
-      // INSTANT LOCAL UI REMOVAL (Card vanishes immediately!)
-      if (item.platform === 'mobile') {
-        setMobileData(prev => prev.filter(m => m.id !== item.id && m.device_uuid !== item.device_uuid));
-      } else {
-        setDesktopData(prev => prev.filter(d => d.id !== item.id && d.device_uuid !== item.device_uuid));
-      }
+      // 2. Delete from desktop_licenses
+      await safeDelete('desktop_licenses', 'id', item.id);
+      await safeDelete('desktop_licenses', 'device_uuid', item.device_uuid);
+      await safeDelete('desktop_licenses', 'email', targetEmail);
+      await safeDelete('desktop_licenses', 'hotel_name', targetHotelName, true);
 
-      setStatusToast(`Record for "${item.hotel_name || 'Hotel'}" deleted permanently!`);
+      // 3. Delete from hotels table
+      await safeDelete('hotels', 'id', matchedHotelRow?.id);
+      await safeDelete('hotels', 'hotel_code', targetCode);
+      await safeDelete('hotels', 'owner_id', targetOwnerId);
+      await safeDelete('hotels', 'hotel_name', targetHotelName, true);
+
+      // 4. Delete from analytics_snapshots table
+      await safeDelete('analytics_snapshots', 'hotel_code', targetCode);
+      await safeDelete('analytics_snapshots', 'owner_id', targetOwnerId);
+
+      // 5. Delete from users table
+      await safeDelete('users', 'id', targetOwnerId);
+      await safeDelete('users', 'email', targetEmail);
+
+      // INSTANT LOCAL UI REMOVAL Across all states
+      setMobileData(prev => prev.filter(m => 
+        m.id !== item.id && 
+        (!item.device_uuid || m.device_uuid !== item.device_uuid) && 
+        (!targetEmail || m.email !== targetEmail) &&
+        (!targetHotelName || m.hotel_name?.toLowerCase().trim() !== targetHotelName.toLowerCase().trim())
+      ));
+
+      setDesktopData(prev => prev.filter(d => 
+        d.id !== item.id && 
+        (!item.device_uuid || d.device_uuid !== item.device_uuid) && 
+        (!targetEmail || d.email !== targetEmail) &&
+        (!targetHotelName || d.hotel_name?.toLowerCase().trim() !== targetHotelName.toLowerCase().trim())
+      ));
+
+      setHotelsData(prev => prev.filter(h => 
+        h.id !== item.id && 
+        (!targetCode || h.hotel_code !== targetCode) &&
+        (!targetOwnerId || h.owner_id !== targetOwnerId) &&
+        (!targetHotelName || h.hotel_name?.toLowerCase().trim() !== targetHotelName.toLowerCase().trim())
+      ));
+
+      setStatusToast(`Record for "${targetHotelName || 'Hotel'}" and all DB entries deleted permanently!`);
       setTimeout(() => setStatusToast(''), 4000);
     } catch (err) {
       console.error('[SUPER ADMIN] Delete error:', err);
