@@ -203,10 +203,12 @@ export default function VendorAdminPage() {
 
       const matchedHotelRow = (hotelsData || []).find(h => 
         h.id === item.id || 
-        (h.hotel_code && h.hotel_code === item.device_uuid) || 
+        (h.hotel_code && (h.hotel_code === item.hotel_code || h.hotel_code === item.device_uuid)) || 
+        (h.owner_email && item.email && h.owner_email.toLowerCase().trim() === item.email.toLowerCase().trim()) ||
+        (h.email && item.email && h.email.toLowerCase().trim() === item.email.toLowerCase().trim()) ||
         (h.hotel_name && item.hotel_name && h.hotel_name.toLowerCase().trim() === item.hotel_name.toLowerCase().trim())
       );
-      const matchedSnapRow = (snapshotsData || []).find(s => s.hotel_code && s.hotel_code === item.device_uuid);
+      const matchedSnapRow = (snapshotsData || []).find(s => s.hotel_code && (s.hotel_code === item.hotel_code || s.hotel_code === item.device_uuid || (matchedHotelRow && s.hotel_code === matchedHotelRow.hotel_code)));
       const targetCode = matchedHotelRow?.hotel_code || item.hotel_code || matchedSnapRow?.hotel_code || item.device_uuid;
       const targetOwnerId = matchedHotelRow?.owner_id || item.owner_id;
       const targetEmail = item.email || matchedHotelRow?.email;
@@ -308,10 +310,12 @@ export default function VendorAdminPage() {
       const q = searchQuery.toLowerCase().trim();
       const matchedHotelRow = (hotelsData || []).find(h => 
         h.id === item.id || 
-        (h.hotel_code && h.hotel_code === item.device_uuid) || 
+        (h.hotel_code && (h.hotel_code === item.hotel_code || h.hotel_code === item.device_uuid)) || 
+        (h.owner_email && item.email && h.owner_email.toLowerCase().trim() === item.email.toLowerCase().trim()) ||
+        (h.email && item.email && h.email.toLowerCase().trim() === item.email.toLowerCase().trim()) ||
         (h.hotel_name && item.hotel_name && h.hotel_name.toLowerCase().trim() === item.hotel_name.toLowerCase().trim())
       );
-      const matchedSnapRow = (snapshotsData || []).find(s => s.hotel_code && s.hotel_code === item.device_uuid);
+      const matchedSnapRow = (snapshotsData || []).find(s => s.hotel_code && (s.hotel_code === item.hotel_code || s.hotel_code === item.device_uuid || (matchedHotelRow && s.hotel_code === matchedHotelRow.hotel_code)));
       const hotelCodeStr = (matchedHotelRow?.hotel_code || item.hotel_code || matchedSnapRow?.hotel_code || '').toLowerCase();
 
       const nameMatch = item.hotel_name && item.hotel_name.toLowerCase().includes(q);
@@ -608,11 +612,13 @@ export default function VendorAdminPage() {
             paginatedData.map((item) => {
               const matchedHotelRow = (hotelsData || []).find(h => 
                 h.id === item.id || 
-                (h.hotel_code && h.hotel_code === item.device_uuid) || 
+                (h.hotel_code && (h.hotel_code === item.hotel_code || h.hotel_code === item.device_uuid)) || 
+                (h.owner_email && item.email && h.owner_email.toLowerCase().trim() === item.email.toLowerCase().trim()) ||
+                (h.email && item.email && h.email.toLowerCase().trim() === item.email.toLowerCase().trim()) ||
                 (h.hotel_name && item.hotel_name && h.hotel_name.toLowerCase().trim() === item.hotel_name.toLowerCase().trim())
               );
-              const matchedSnapRow = (snapshotsData || []).find(s => s.hotel_code && s.hotel_code === item.device_uuid);
-              const rawCode = matchedHotelRow?.hotel_code || item.hotel_code || matchedSnapRow?.hotel_code;
+              const matchedSnapRow = (snapshotsData || []).find(s => s.hotel_code && (s.hotel_code === item.hotel_code || s.hotel_code === item.device_uuid || (matchedHotelRow && s.hotel_code === matchedHotelRow.hotel_code)));
+              const rawCode = matchedHotelRow?.hotel_code || item.hotel_code || item.code || matchedSnapRow?.hotel_code;
               const displayHotelCode = (rawCode && rawCode !== 'HOTEL_001' && !rawCode.startsWith('HOTEL_')) ? rawCode : (rawCode && rawCode.length === 5 ? rawCode : null);
 
               return (
