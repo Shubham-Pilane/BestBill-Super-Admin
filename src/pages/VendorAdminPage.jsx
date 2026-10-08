@@ -119,9 +119,34 @@ export default function VendorAdminPage() {
         supabase.from('analytics_snapshots').select('hotel_code, created_at')
       ]);
 
-      setMobileData(mRes.data || []);
-      setDesktopData(dRes.data || []);
-      setHotelsData(hRes.data || []);
+      // Read soft-deleted records
+      const deletedRecordsStr = localStorage.getItem('bestbill_super_admin_deleted_records');
+      const deletedRecords = deletedRecordsStr ? JSON.parse(deletedRecordsStr) : [];
+
+      const isDeleted = (item, type = 'license') => {
+        return deletedRecords.some(del => {
+          if (type === 'license') {
+            return (del.id && del.id === item.id) || 
+                   (del.device_uuid && del.device_uuid === item.device_uuid) ||
+                   (del.email && item.email && del.email === item.email) ||
+                   (del.hotel_name && item.hotel_name && del.hotel_name.toLowerCase().trim() === item.hotel_name.toLowerCase().trim());
+          }
+          if (type === 'hotel') {
+            return (del.hotel_code && del.hotel_code === item.hotel_code) ||
+                   (del.owner_id && del.owner_id === item.owner_id) ||
+                   (del.hotel_name && item.hotel_name && del.hotel_name.toLowerCase().trim() === item.hotel_name.toLowerCase().trim());
+          }
+          return false;
+        });
+      };
+
+      const mData = (mRes.data || []).filter(m => !isDeleted(m, 'license'));
+      const dData = (dRes.data || []).filter(d => !isDeleted(d, 'license'));
+      const hData = (hRes.data || []).filter(h => !isDeleted(h, 'hotel'));
+
+      setMobileData(mData);
+      setDesktopData(dData);
+      setHotelsData(hData);
       setUsersData(uRes.data || []);
       setSnapshotsData(aRes.data || []);
     } catch (err) {
@@ -199,7 +224,7 @@ export default function VendorAdminPage() {
     setDeleting(true);
 
     try {
-      console.log(`[SUPER ADMIN] PERMANENT MULTI-TABLE DELETION for "${item.hotel_name}"...`);
+      console.log(`[SUPER ADMIN] SOFT DELETION (UI ONLY) for "${item.hotel_name}"...`);
 
       const matchedHotelRow = (hotelsData || []).find(h => 
         h.id === item.id || 
@@ -209,54 +234,31 @@ export default function VendorAdminPage() {
         (h.hotel_name && item.hotel_name && h.hotel_name.toLowerCase().trim() === item.hotel_name.toLowerCase().trim())
       );
       const matchedSnapRow = (snapshotsData || []).find(s => s.hotel_code && (s.hotel_code === item.hotel_code || s.hotel_code === item.device_uuid || (matchedHotelRow && s.hotel_code === matchedHotelRow.hotel_code)));
+      
       const targetCode = matchedHotelRow?.hotel_code || item.hotel_code || matchedSnapRow?.hotel_code || item.device_uuid;
       const targetOwnerId = matchedHotelRow?.owner_id || item.owner_id;
       const targetEmail = item.email || matchedHotelRow?.email;
       const targetHotelName = item.hotel_name || matchedHotelRow?.hotel_name;
 
-      // Safe helper function for Supabase deletes without broken .catch chaining
-      const safeDelete = async (table, column, val, isIlike = false) => {
-        if (!val) return;
-        try {
-          let builder = supabase.from(table).delete();
-          if (isIlike) {
-            builder = builder.ilike(column, val.trim());
-          } else {
-            builder = builder.eq(column, val);
-          }
-          await builder;
-        } catch (e) {
-          console.warn(`[SUPER ADMIN] Delete ${table} (${column}=${val}) notice:`, e.message);
-        }
-      };
+      // 1. Get existing soft deleted records from localStorage
+      const deletedRecordsStr = localStorage.getItem('bestbill_super_admin_deleted_records');
+      const deletedRecords = deletedRecordsStr ? JSON.parse(deletedRecordsStr) : [];
+      
+      // 2. Add this item's ID to the soft deleted list
+      deletedRecords.push({
+        id: item.id,
+        device_uuid: item.device_uuid,
+        email: targetEmail,
+        hotel_name: targetHotelName,
+        hotel_code: targetCode,
+        owner_id: targetOwnerId,
+        deletedAt: new Date().toISOString()
+      });
+      
+      // 3. Save back to localStorage
+      localStorage.setItem('bestbill_super_admin_deleted_records', JSON.stringify(deletedRecords));
 
-      // 1. Delete from mobile_licenses
-      await safeDelete('mobile_licenses', 'id', item.id);
-      await safeDelete('mobile_licenses', 'device_uuid', item.device_uuid);
-      await safeDelete('mobile_licenses', 'email', targetEmail);
-      await safeDelete('mobile_licenses', 'hotel_name', targetHotelName, true);
-
-      // 2. Delete from desktop_licenses
-      await safeDelete('desktop_licenses', 'id', item.id);
-      await safeDelete('desktop_licenses', 'device_uuid', item.device_uuid);
-      await safeDelete('desktop_licenses', 'email', targetEmail);
-      await safeDelete('desktop_licenses', 'hotel_name', targetHotelName, true);
-
-      // 3. Delete from hotels table
-      await safeDelete('hotels', 'id', matchedHotelRow?.id);
-      await safeDelete('hotels', 'hotel_code', targetCode);
-      await safeDelete('hotels', 'owner_id', targetOwnerId);
-      await safeDelete('hotels', 'hotel_name', targetHotelName, true);
-
-      // 4. Delete from analytics_snapshots table
-      await safeDelete('analytics_snapshots', 'hotel_code', targetCode);
-      await safeDelete('analytics_snapshots', 'owner_id', targetOwnerId);
-
-      // 5. Delete from users table
-      await safeDelete('users', 'id', targetOwnerId);
-      await safeDelete('users', 'email', targetEmail);
-
-      // INSTANT LOCAL UI REMOVAL Across all states
+      // 4. INSTANT LOCAL UI REMOVAL Across all states
       setMobileData(prev => prev.filter(m => 
         m.id !== item.id && 
         (!item.device_uuid || m.device_uuid !== item.device_uuid) && 
@@ -278,11 +280,11 @@ export default function VendorAdminPage() {
         (!targetHotelName || h.hotel_name?.toLowerCase().trim() !== targetHotelName.toLowerCase().trim())
       ));
 
-      setStatusToast(`Record for "${targetHotelName || 'Hotel'}" and all DB entries deleted permanently!`);
+      setStatusToast(`Record for "${targetHotelName || 'Hotel'}" soft-deleted (hidden from UI)!`);
       setTimeout(() => setStatusToast(''), 4000);
     } catch (err) {
-      console.error('[SUPER ADMIN] Delete error:', err);
-      alert(`Delete Error: ${err.message}`);
+      console.error('[SUPER ADMIN] Soft delete error:', err);
+      alert(`Soft Delete Error: ${err.message}`);
     } finally {
       setDeleting(false);
       setDeleteConfirmItem(null);
