@@ -127,14 +127,11 @@ export default function VendorAdminPage() {
         return deletedRecords.some(del => {
           if (type === 'license') {
             return (del.id && del.id === item.id) || 
-                   (del.device_uuid && del.device_uuid === item.device_uuid) ||
-                   (del.email && item.email && del.email === item.email) ||
-                   (del.hotel_name && item.hotel_name && del.hotel_name.toLowerCase().trim() === item.hotel_name.toLowerCase().trim());
+                   (del.device_uuid && del.device_uuid === item.device_uuid);
           }
           if (type === 'hotel') {
             return (del.hotel_code && del.hotel_code === item.hotel_code) ||
-                   (del.owner_id && del.owner_id === item.owner_id) ||
-                   (del.hotel_name && item.hotel_name && del.hotel_name.toLowerCase().trim() === item.hotel_name.toLowerCase().trim());
+                   (del.owner_id && del.owner_id === item.owner_id);
           }
           return false;
         });
@@ -261,23 +258,18 @@ export default function VendorAdminPage() {
       // 4. INSTANT LOCAL UI REMOVAL Across all states
       setMobileData(prev => prev.filter(m => 
         m.id !== item.id && 
-        (!item.device_uuid || m.device_uuid !== item.device_uuid) && 
-        (!targetEmail || m.email !== targetEmail) &&
-        (!targetHotelName || m.hotel_name?.toLowerCase().trim() !== targetHotelName.toLowerCase().trim())
+        (!item.device_uuid || m.device_uuid !== item.device_uuid)
       ));
 
       setDesktopData(prev => prev.filter(d => 
         d.id !== item.id && 
-        (!item.device_uuid || d.device_uuid !== item.device_uuid) && 
-        (!targetEmail || d.email !== targetEmail) &&
-        (!targetHotelName || d.hotel_name?.toLowerCase().trim() !== targetHotelName.toLowerCase().trim())
+        (!item.device_uuid || d.device_uuid !== item.device_uuid)
       ));
 
       setHotelsData(prev => prev.filter(h => 
         h.id !== item.id && 
         (!targetCode || h.hotel_code !== targetCode) &&
-        (!targetOwnerId || h.owner_id !== targetOwnerId) &&
-        (!targetHotelName || h.hotel_name?.toLowerCase().trim() !== targetHotelName.toLowerCase().trim())
+        (!targetOwnerId || h.owner_id !== targetOwnerId)
       ));
 
       setStatusToast(`Record for "${targetHotelName || 'Hotel'}" soft-deleted (hidden from UI)!`);
